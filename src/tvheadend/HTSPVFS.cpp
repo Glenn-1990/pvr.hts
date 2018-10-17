@@ -101,14 +101,37 @@ ssize_t HTSPVFS::Read ( unsigned char *buf, unsigned int len )
   if (!m_fileId)
     return -1;
 
-  /* Read */
-  ssize_t read = SendFileRead(buf, len);
+  ssize_t read = 0;
+  int64_t readpos = -1; //-1 = read from current position
+  int sleeptime=20000; //20ms
+  int timeout=1000;
+  while (timeout > 0)
+  {
+	  read=SendFileRead(readpos, buf, len);
+	  if (read == len) {
+		  m_offset += read;
+		  return read;
+	  }
+	  else if (read <= 0)
+	  {
+		  return 0;
+	  }
+	  else if (read < len)
+	  {
+		  Logger::Log(LogLevel::LEVEL_TRACE, "vfs read incomplete requested=%d bytes, read=%d bytes, readposition=%lld, timeout=%i",
+				  len, read, readpos, timeout);
+		  readpos=m_offset;
+		  usleep(5000);
+		  timeout--;
+	  }
+	  else
+	  {
+		  return 0;
+	  }
+	  timeout--;
+  }
 
-  /* Update */
-  if (read > 0)
-    m_offset += read;
-
-  return read;
+  return -1;
 }
 
 long long HTSPVFS::Seek ( long long pos, int whence )
@@ -268,7 +291,7 @@ long long HTSPVFS::SendFileSeek ( int64_t pos, int whence, bool force )
   return ret;
 }
 
-ssize_t HTSPVFS::SendFileRead(unsigned char *buf, unsigned int len)
+ssize_t HTSPVFS::SendFileRead(int64_t pos, unsigned char *buf, unsigned int len)
 {
   htsmsg_t   *m;
   const void *buffer;
@@ -279,8 +302,12 @@ ssize_t HTSPVFS::SendFileRead(unsigned char *buf, unsigned int len)
   htsmsg_add_u32(m, "id", m_fileId);
   htsmsg_add_s64(m, "size", len);
 
-  Logger::Log(LogLevel::LEVEL_TRACE, "vfs read id=%d size=%d",
-    m_fileId, len);
+  /* Optional seek and read from the given position */
+  if (pos >= 0)
+	htsmsg_add_s64(m, "offset", pos);
+  
+  Logger::Log(LogLevel::LEVEL_TRACE, "vfs read id=%d size=%d readposition=%lld",
+      m_fileId, len, pos);
 
   /* Send */
   {

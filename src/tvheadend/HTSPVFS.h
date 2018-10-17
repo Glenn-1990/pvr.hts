@@ -52,7 +52,7 @@ public:
 private:
   bool SendFileOpen(bool force = false);
   void SendFileClose();
-  ssize_t SendFileRead(unsigned char *buf, unsigned int len);
+  ssize_t SendFileRead(int64_t pos, unsigned char *buf, unsigned int len);
   long long SendFileSeek(int64_t pos, int whence, bool force = false);
 
   HTSPConnection &m_conn;
